@@ -8,24 +8,23 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&amp;display=swap" rel="stylesheet">
     <style>
         :root {
-            /* メインカラーパレット */
-            --bg-primary: #2d2d2d;      /* 濃いグレー */
-            --bg-secondary: #f5f5dc;     /* クリーム色 */
-            --text-light: #e8e8e8;      /* ライトグレー */
-            --text-dark: #2d2d2d;       /* ダークグレー */
-            --accent: #8b7355;          /* 落ち着いたブラウン */
-            --accent-light: #d4af37;    /* ゴールド */
+            --bg-primary: #2d2d2d;
+            --bg-secondary: #f5f5dc;
+            --text-light: #e8e8e8;
+            --text-dark: #2d2d2d;
+            --accent: #8b7355;
+            --accent-light: #d4af37;
         }
 
         body {
             background: var(--bg-primary);
             color: var(--text-light);
             font-family: 'Noto Sans JP', sans-serif;
-            margin: 0; /* Reset default body margin */
+            margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 110vh; /* Increased by 10% */
+            min-height: 110vh;
         }
 
         .game-container {
@@ -38,17 +37,17 @@
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
             border-radius: 10px;
             overflow: hidden;
-            padding: 20px; /* Add padding to the container itself */
+            padding: 20px;
         }
 
         .game-main {
-            display: none; /* Hide initially */
+            display: none;
             flex-wrap: wrap;
             gap: 20px;
         }
 
         .resources-panel, .reports-panel, .actions-panel {
-            background-color: #3a3a3a; /* Slightly lighter than primary background */
+            background-color: #3a3a3a;
             border-radius: 8px;
             padding: 15px;
             box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.3);
@@ -56,15 +55,15 @@
         }
 
         .resources-panel {
-            flex: 1 1 250px; /* Adjusted base width */
+            flex: 1 1 250px;
         }
 
         .reports-panel {
-            flex: 2 1 520px; /* Increased base width (400 * 1.3 = 520) */
+            flex: 2 1 520px;
         }
 
         .actions-panel {
-            flex: 0 1 200px; /* Reduced base width */
+            flex: 0 1 200px;
         }
 
         .resource-bar {
@@ -84,7 +83,7 @@
 
         .action-buttons {
             display: flex;
-            flex-direction: column; /* Stack buttons vertically */
+            flex-direction: column;
             gap: 10px;
             margin-top: 10px;
         }
@@ -99,11 +98,11 @@
             font-size: 1em;
             display: flex;
             align-items: center;
-            justify-content: center; /* Center content in button */
+            justify-content: center;
             gap: 5px;
             transition: background-color 0.3s ease;
-            width: 100%; /* Make buttons take full width of panel */
-            box-sizing: border-box; /* Include padding and border in width */
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .action-btn:hover {
@@ -111,51 +110,23 @@
         }
 
         #output {
-            background-color: #2d2d2d; /* Adjusted to primary background */
-            border: 1px solid var(--accent); /* Adjusted border color */
+            background-color: #2d2d2d;
+            border: 1px solid var(--accent);
             padding: 10px;
-            height: 590px; /* Fixed height for output */
+            height: 590px;
             overflow-y: auto;
             margin-bottom: 10px;
-            color: var(--text-light); /* Adjusted text color */
-        }
-
-        #input-area {
-            display: flex;
-            margin-top: 10px;
-        }
-
-        #user-input {
-            flex-grow: 1;
-            background-color: #2d2d2d; /* Adjusted to primary background */
-            border: 1px solid var(--accent); /* Adjusted border color */
-            color: var(--text-light); /* Adjusted text color */
-            padding: 5px;
-        }
-
-        #submit-button {
-            background-color: var(--accent);
-            color: var(--text-dark);
-            border: none;
-            padding: 5px 10px;
-            cursor: pointer;
-            margin-left: 5px;
-        }
-
-        /* Hide action buttons and input area initially */
-        .action-buttons,
-        #input-area {
-            display: none;
+            color: var(--text-light);
         }
 
         #initial-start-game-button {
-            margin: 20px auto; /* Center the button */
-            display: block; /* Ensure it's a block element for margin auto */
-            width: 80px; /* Smaller width */
-            height: 80px; /* Smaller height */
-            border-radius: 50%; /* Make it circular */
-            font-size: 2em; /* Larger icon/text if any */
-            background-color: var(--accent-light); /* Different color for start button */
+            margin: 20px auto;
+            display: block;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            font-size: 2em;
+            background-color: var(--accent-light);
             color: var(--text-dark);
             display: flex;
             align-items: center;
@@ -167,7 +138,29 @@
             background-color: var(--accent);
         }
 
-        /* Responsive adjustments */
+        #choices-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .choice-btn {
+            background-color: var(--accent);
+            color: var(--text-dark);
+            border: 1px solid var(--accent-light);
+            padding: 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.3s ease;
+            text-align: left;
+        }
+
+        .choice-btn:hover {
+            background-color: var(--accent-light);
+        }
+
         @media (max-width: 768px) {
             .game-main {
                 flex-direction: column;
@@ -186,13 +179,12 @@
             <section class="resources-panel">
                 <div id="day-display" style="font-size: 3.5em; margin-bottom: 15px; font-family: 'Playfair Display', serif;">Day 1</div>
                 <h2>Resources</h2>
-                <div id="resources-display">
-                    <!-- Resource bars will be dynamically inserted here -->
-                </div>
+                <div id="resources-display"></div>
             </section>
             <section class="reports-panel">
                 <h2>Daily Reports</h2>
-                <div id="output"></div> <!-- Existing output div -->
+                <div id="output"></div>
+                <div id="choices-container"></div>
             </section>
             <section class="actions-panel">
                 <h2>Actions</h2>
@@ -214,127 +206,58 @@
                         翌日まで休息する
                     </button>
                 </div>
-                <div id="input-area">
-                    <input type="text" id="user-input" disabled>
-                    <button id="submit-button" disabled>送信</button>
-                </div>
             </section>
         </main>
     </div>
 
-    
-
     <script src="game.js"></script>
     <script>
         const outputDiv = document.getElementById('output');
-        const userInput = document.getElementById('user-input');
-        const submitButton = document.getElementById('submit-button');
         const dayDisplay = document.getElementById('day-display');
         const resourcesDisplay = document.getElementById('resources-display');
         const initialStartGameButton = document.getElementById('initial-start-game-button');
         const actionButtonsDiv = document.querySelector('.action-buttons');
-        const inputAreaDiv = document.getElementById('input-area');
-        const gameMain = document.querySelector('.game-main'); // Get reference to game-main
+        const gameMain = document.querySelector('.game-main');
+        const choicesContainer = document.getElementById('choices-container');
 
-        // Action buttons
         const actionCouncilButton = document.getElementById('councilBtn');
         const actionEnvoyButton = document.getElementById('envoyBtn');
         const actionResourcesButton = document.getElementById('resourceBtn');
         const actionRestButton = document.getElementById('restBtn');
 
-        function appendOutput(text) {
-            outputDiv.innerText += text + '\n';
-            outputDiv.scrollTop = outputDiv.scrollHeight;
-        }
-
-        let resolveInputPromise;
-
-        // JavaScript版のprint関数
         function jsPrint(text) {
-            outputDiv.innerText += text + '\n'; // Directly append to outputDiv
+            outputDiv.innerHTML += text + '<br>';
             outputDiv.scrollTop = outputDiv.scrollHeight;
         }
 
-        // JavaScript版のinput関数
-        function jsInput(prompt) {
-            return new Promise(resolve => {
-                appendOutput(prompt);
-                resolveInputPromise = resolve;
-                userInput.disabled = false;
-                submitButton.disabled = false;
-                userInput.focus();
-            });
-        }
-
-        submitButton.addEventListener('click', () => {
-            if (resolveInputPromise) {
-                const value = userInput.value;
-                userInput.value = '';
-                userInput.disabled = true;
-                submitButton.disabled = true;
-                resolveInputPromise(value);
-                resolveInputPromise = null;
-            }
-        });
-
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                submitButton.click();
-            }
-        });
-
-        // New initial game start button logic
         initialStartGameButton.addEventListener('click', async () => {
-            initialStartGameButton.style.display = 'none'; // Hide the start button
-            gameMain.style.display = 'flex'; // Show the main game UI
-            actionButtonsDiv.style.display = 'flex'; // Show action buttons
-            inputAreaDiv.style.display = 'flex'; // Show input area
+            initialStartGameButton.style.display = 'none';
+            gameMain.style.display = 'flex';
+            actionButtonsDiv.style.display = 'flex';
 
             try {
                 if (typeof window.startGame === 'function') {
                     await window.startGame();
                 } else {
-                    appendOutput('エラー: window.startGame が定義されていません。');
-                    console.error('window.startGame is not a function or not defined.');
+                    jsPrint('エラー: window.startGame が定義されていません。');
                 }
             } catch (err) {
-                appendOutput('エラーが発生しました: ' + err);
+                jsPrint('エラーが発生しました: ' + err);
                 console.error(err);
             }
         });
 
-        // Action button event listeners (now call gameLoop actions directly)
-        actionCouncilButton.addEventListener('click', async () => {
-            if (typeof window.performCouncilAction === 'function') {
-                await window.performCouncilAction();
-            }
-        });
+        actionCouncilButton.addEventListener('click', () => window.performCouncilAction?.());
+        actionEnvoyButton.addEventListener('click', () => window.performEnvoyAction?.());
+        actionResourcesButton.addEventListener('click', () => window.performResourcesAction?.());
+        actionRestButton.addEventListener('click', () => window.performRestAction?.());
 
-        actionEnvoyButton.addEventListener('click', async () => {
-            if (typeof window.performEnvoyAction === 'function') {
-                await window.performEnvoyAction();
-            }
-        });
-
-        actionResourcesButton.addEventListener('click', async () => {
-            if (typeof window.performResourcesAction === 'function') {
-                await window.performResourcesAction();
-            }
-        });
-
-        actionRestButton.addEventListener('click', async () => {
-            if (typeof window.performRestAction === 'function') {
-                await window.performRestAction();
-            }
-        });
-
-        // Initial UI update (day and resources) - called from game.js
         window.updateDayDisplay = (day) => {
             dayDisplay.innerText = `Day ${day}`;
         };
 
         window.updateResourcesDisplay = (resources) => {
-            resourcesDisplay.innerHTML = ''; // Clear previous resources
+            resourcesDisplay.innerHTML = '';
             for (const resource in resources) {
                 const value = resources[resource];
                 const barWidth = value + '%';
@@ -348,6 +271,23 @@
                 `;
                 resourcesDisplay.innerHTML += resourceHtml;
             }
+        };
+
+        window.displayChoices = (choices, callbackName) => {
+            choicesContainer.innerHTML = '';
+            for (const key in choices) {
+                const text = choices[key];
+                const buttonHtml = `<button class="choice-btn" onclick="window.${callbackName}('${key}')">${text}</button>`;
+                choicesContainer.innerHTML += buttonHtml;
+            }
+        };
+
+        window.clearChoices = () => {
+            choicesContainer.innerHTML = '';
+        };
+
+        window.toggleActionButtons = (show) => {
+            actionButtonsDiv.style.display = show ? 'flex' : 'none';
         };
 
     </script>
