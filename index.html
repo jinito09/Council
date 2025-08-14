@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Council in Darkness</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&amp;display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&amp;display=swap" rel="stylesheet">
     <style>
         :root {
             /* メインカラーパレット */
@@ -197,21 +197,21 @@
             <section class="actions-panel">
                 <h2>Actions</h2>
                 <div class="action-buttons">
-                    <button class="action-btn" id="action-council">
+                    <button class="action-btn" id="councilBtn" onclick="performCouncilAction()">
                         <i class="icon council-icon"></i>
                         評議会を開催する
                     </button>
-                    <button class="action-btn" id="action-envoy">
+                    <button class="action-btn" id="envoyBtn" onclick="performEnvoyAction()">
                         <i class="icon spy-icon"></i>
                         個人偵察を派遣する
                     </button>
-                    <button class="action-btn" id="action-resources">
+                    <button class="action-btn" id="resourceBtn" onclick="performResourcesAction()">
                         <i class="icon chart-icon"></i>
                         資源記録を確認する
                     </button>
-                    <button class="action-btn" id="action-rest">
+                    <button class="action-btn" id="restBtn" onclick="performRestAction()" style="display:none">
                         <i class="icon sleep-icon"></i>
-                        明日まで休息する
+                        翌日まで休息する
                     </button>
                 </div>
                 <div id="input-area">
@@ -221,6 +221,8 @@
             </section>
         </main>
     </div>
+
+    
 
     <script src="game.js"></script>
     <script>
@@ -235,10 +237,10 @@
         const gameMain = document.querySelector('.game-main'); // Get reference to game-main
 
         // Action buttons
-        const actionCouncilButton = document.getElementById('action-council');
-        const actionEnvoyButton = document.getElementById('action-envoy');
-        const actionResourcesButton = document.getElementById('action-resources');
-        const actionRestButton = document.getElementById('action-rest');
+        const actionCouncilButton = document.getElementById('councilBtn');
+        const actionEnvoyButton = document.getElementById('envoyBtn');
+        const actionResourcesButton = document.getElementById('resourceBtn');
+        const actionRestButton = document.getElementById('restBtn');
 
         function appendOutput(text) {
             outputDiv.innerText += text + '\n';
@@ -305,32 +307,24 @@
         actionCouncilButton.addEventListener('click', async () => {
             if (typeof window.performCouncilAction === 'function') {
                 await window.performCouncilAction();
-            } else {
-                jsPrint('エラー: 評議会アクションが利用できません。');
             }
         });
 
         actionEnvoyButton.addEventListener('click', async () => {
             if (typeof window.performEnvoyAction === 'function') {
                 await window.performEnvoyAction();
-            } else {
-                jsPrint('エラー: 偵察アクションが利用できません。');
             }
         });
 
         actionResourcesButton.addEventListener('click', async () => {
             if (typeof window.performResourcesAction === 'function') {
                 await window.performResourcesAction();
-            } else {
-                jsPrint('エラー: 資源記録アクションが利用できません。');
             }
         });
 
         actionRestButton.addEventListener('click', async () => {
             if (typeof window.performRestAction === 'function') {
                 await window.performRestAction();
-            } else {
-                jsPrint('エラー: 休息アクションが利用できません。');
             }
         });
 

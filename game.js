@@ -1,10 +1,18 @@
 const MESSAGES = {
-    ui: {
-        title: 'COUNCIL IN DARKNESS',
-        resources: 'RESOURCES:',
-        daily_reports: 'DAILY REPORTS (Day {}):',
-        actions: 'ACTIONS:'
-    },
+  phases: {
+    planning: '計画',
+    operations: '実行',
+    assessment: '評定'
+  },
+   ui: {
+     title: 'COUNCIL IN DARKNESS',
+     resources: 'RESOURCES:',
+     daily_reports: 'DAILY REPORTS (Day {}):',
+    actions: 'ACTIONS:',
+    phase_label: 'PHASE: {}',
+    ops_summary: '=== 本日の実行結果（事実ログ） ===',
+    reported_summary: '=== 評議員の報告（報告ログ） ==='
+   },
     actions: {
         1: '評議会を開催する',
         2: '個人偵察を派遣する',
@@ -99,85 +107,110 @@ const MESSAGES = {
 };
 
 function getMessage(category, key, ...args) {
-    try {
-        let message = MESSAGES[category][key];
-        if (args.length > 0) {
-            // Pythonの.format()のように{}を置換
-            for (let i = 0; i < args.length; i++) {
-                message = message.replace('{}', args[i]);
-            }
-        }
-        return message;
-    } catch (e) {
-        return `[メッセージが見つかりません: ${category}.${key}]`;
+  try {
+    let message = MESSAGES[category][key];
+    if (typeof message !== 'string') {
+      return `[メッセージが見つかりません: ${category}.${key}]`;
     }
+    if (args.length > 0) {
+      for (let i = 0; i < args.length; i++) {
+        message = message.replace("{}", args[i]);
+      }
+    }
+    return message;
+  } catch (e) {
+    return `[メッセージが見つかりません: ${category}.${key}]`;
+  }
 }
 
 // 評議員の初期化関数
 function initializeCouncillors() {
-    const agendas = ['忠実', '権力欲', '生存主義', '工作員'];
-    const weights = [60, 20, 15, 5];
-
-    const councillors = [
-        { name: 'Alex Chen', role: 'Fuel Manager' },
-        { name: 'Maria Santos', role: 'Food Coordinator' },
-        { name: 'David Kim', role: 'Personnel Chief' },
-        { name: 'Sarah Johnson', role: 'Scout Leader' }
-    ];
-
-    for (const councillor of councillors) {
-        // Pythonのrandom.choicesを模倣
-        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-        let randomValue = Math.random() * totalWeight;
-        let chosenAgenda = '';
-        for (let i = 0; i < agendas.length; i++) {
-            randomValue -= weights[i];
-            if (randomValue <= 0) {
-                chosenAgenda = agendas[i];
-                break;
-            }
-        }
-        councillor.secret_agenda = chosenAgenda;
-        councillor.loyalty = Math.random() * (0.9 - 0.4) + 0.4;
-        councillor.suspicion = 0;
+  const agendas = ['忠実', '権力欲', '生存主義', '工作員'];
+  const weights = [60, 20, 15, 5];
+  const councillors = [
+    { name: 'Alex Chen', role: 'Fuel Manager' },
+    { name: 'Maria Santos', role: 'Food Coordinator' },
+    { name: 'David Kim', role: 'Personnel Chief' },
+    { name: 'Sarah Johnson', role: 'Scout Leader' }
+  ];
+  for (const councillor of councillors) {
+    // weighted choice
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+    let randomValue = Math.random() * totalWeight;
+    let chosenAgenda = '';
+    for (let i = 0; i < agendas.length; i++) {
+      randomValue -= weights[i];
+      if (randomValue <= 0) {
+        chosenAgenda = agendas[i];
+        break;
+      }
     }
-
-    return councillors;
+    councillor.secret_agenda = chosenAgenda;
+    councillor.loyalty = Math.random() * (0.9 - 0.4) + 0.4;
+    councillor.suspicion = 0;
+  }
+  return councillors;
 }
 
 // ゲームの状態
 let gameState = {
-    day: 1,
-    resources: {
-        fuel: 100,
-        food: 100,
-        people: 80,
-        trust: 50,
-        defense: 20,
-        diplomacy: 30,
-        intelligence: 10
-    },
-    councillors: initializeCouncillors(),
-    events: [],
-    player_actions: [],
-    northern_coalition: {
-        next_demand_day: 7,
-        hostility_level: 30,
-        recent_demands: [],
-        last_response: null
+   day: 1,
+  council_done: false,  // その日に評議会済みか
+  envoy_done: false,    // その日に偵察済みか
+  action_queue: [],
+  logs: { reported: {}, actual: {} },
+   resources: {
+     fuel: 100,
+     food: 100,
+     people: 80,
+     trust: 50,
+     defense: 20,
+     diplomacy: 30,
+     intelligence: 10
+   },
+   councillors: initializeCouncillors(),
+   events: [],
+   player_actions: [],
+   northern_coalition: {
+     next_demand_day: 7,
+     hostility_level: 30,
+     recent_demands: [],
+     last_response: null
+   }
+ };
+
+function updateActionButtons() {
+  const cb = document.getElementById('councilBtn');
+  const eb = document.getElementById('envoyBtn');
+  const rb = document.getElementById('restBtn');
+  if (cb) cb.disabled = gameState.council_done;
+  if (eb) eb.disabled = gameState.envoy_done;
+  if (rb) {
+    if (gameState.council_done || gameState.envoy_done) {
+      rb.style.display = 'inline-block';
+    } else {
+      rb.style.display = 'none';
     }
-};
+  }
+}
+
+function startDaySimple(state) {
+  state.council_done = false;
+  state.envoy_done = false;
+  state.action_queue = [];
+  displayUi(state);
+  updateActionButtons();
+}
 
 // 日報生成関数
 function generateDailyReports(state) {
-    const reports = [];
-
-    for (const councillor of state.councillors) {
-        const report = generateCouncillorReport(councillor, state);
-        reports.push(`> ${councillor.name}: '${report}'`);
-    }
-
-    return reports;
+  const reports = [];
+  for (const councillor of state.councillors) {
+    const report = generateCouncillorReport(councillor, state);
+    reports.push(`> ${councillor.name}: '${report}'`);
+  }
+  state.logs.reported[state.day] = (state.logs.reported[state.day] || []).concat(reports);
+  return reports;
 }
 
 // 個別の評議員報告を生成（嘘の可能性含む）
@@ -233,22 +266,142 @@ function getResourceStatus(value) {
 }
 
 function displayUi(state) {
-    // Update day display
-    if (typeof window.updateDayDisplay === 'function') {
-        window.updateDayDisplay(state.day);
-    }
-    // Update resources display
-    if (typeof window.updateResourcesDisplay === 'function') {
-        window.updateResourcesDisplay(state.resources);
-    }
-    // Print reports to output div
-    jsPrint(`\n${getMessage('ui', 'daily_reports', state.day)}`);
+  if (typeof window.updateDayDisplay === 'function') {
+    window.updateDayDisplay(state.day);
+  }
+  if (typeof window.updateResourcesDisplay === 'function') {
+    window.updateResourcesDisplay(state.resources);
+  }
+
+  jsPrint(`${getMessage('ui', 'phase_label', MESSAGES.phases[state.current_phase])}`);
+
+  jsPrint(`\n${getMessage('ui', 'daily_reports', state.day)}`);
+  if (state.current_phase === 'planning') {
     const reports = generateDailyReports(state);
-    for (const report of reports) {
-        jsPrint(report);
-    }
-    jsPrint("- ".repeat(40)); // Separator
+    for (const report of reports) jsPrint(report);
+  } else {
+    const reports = state.logs.reported[state.day] || [];
+    for (const report of reports) jsPrint(report);
+  }
+
+  jsPrint("- ".repeat(40));
 }
+
+function startDay(state) {
+  state.current_phase = 'planning';
+  state.action_queue = [];
+  state.council_adoptions_today = 0;
+  displayUi(state);
+}
+
+function proceedToOperations(state) {
+  // planningのキューを締めてoperationsへ
+  state.current_phase = 'operations';
+  // 実行適用
+  const opsLog = applyOperations(state);
+  state.logs.actual[state.day] = (state.logs.actual[state.day] || []).concat(opsLog);
+  displayUi(state);
+}
+
+function proceedToAssessment(state) {
+  state.current_phase = 'assessment';
+  // assessment表示（報告ログ vs 事実ログ）
+  jsPrint(MESSAGES.ui.reported_summary);
+  const rep = state.logs.reported[state.day] || [];
+  rep.forEach(l => jsPrint(l));
+  jsPrint(MESSAGES.ui.ops_summary);
+  const act = state.logs.actual[state.day] || [];
+  act.forEach(l => jsPrint(l));
+  // ここで差異検出・trust/suspicion更新（簡易）
+  detectDiscrepanciesAndUpdate(state, rep, act);
+  displayUi(state);
+}
+
+function endOfDay(state) {
+  // 勝敗判定
+  const defeatMessage = checkDefeatConditions(state);
+  if (defeatMessage) {
+    jsPrint(`\n${defeatMessage}`);
+    return; // 終了
+  }
+  const victoryMessage = checkVictoryConditions(state);
+  if (victoryMessage) {
+    jsPrint(`\n${victoryMessage}`);
+    return; // 終了
+  }
+  // 日を進め、日次消費
+  state.day += 1;
+  const { fuel, food } = calculateDailyConsumption(state);
+  state.resources.fuel = Math.max(0, state.resources.fuel - fuel);
+  state.resources.food = Math.max(0, state.resources.food - food);
+  // 次の日開始
+  startDay(state);
+}
+
+function applyOperations(state) {
+  const logs = [];
+
+  // 2) 提案適用
+  const proposals = state.action_queue.filter(a => a.type === 'proposal');
+  for (const act of proposals) {
+    const before = { ...state.resources };
+    resolveProposalOperation(state, act);
+    const delta = resourceDelta(before, state.resources);
+    logs.push(`提案(${act.key})適用: ${delta}`);
+  }
+
+  // 4) 偵察確定
+  const envoys = state.action_queue.filter(a => a.type === 'envoy');
+  for (const act of envoys) {
+    const truth = getActualSituation(state, act.target);
+    logs.push(`偵察結果(${act.target}): ${truth.split('\n')[0]}`);
+  }
+
+  return logs;
+}
+
+function resourceDelta(before, after) {
+  const keys = ['fuel','food','people','trust','defense','diplomacy','intelligence'];
+  const parts = [];
+  for (const k of keys) {
+    const d = (after[k] ?? 0) - (before[k] ?? 0);
+    if (d !== 0) parts.push(`${k}${d>0?'+':''}${d}`);
+  }
+  return parts.length ? parts.join(', ') : '変化なし';
+}
+
+function resolveProposalOperation(state, action) {
+  const key = action.key;
+  if (key === 'A') {
+    state.resources.food += randRange(5,10);
+    state.resources.trust -= 5;
+  } else if (key === 'B') {
+    state.resources.food += randRange(10,20);
+    state.resources.people -= randRange(0,2);
+  } else if (key === 'C') {
+    state.resources.people -= randRange(5,10);
+    state.resources.food += randRange(5,10);
+  } else if (key === 'D') {
+    state.resources.fuel -= randRange(5,10);
+    state.resources.food += randRange(5,10);
+  } else if (key === 'E') {
+    state.resources.defense += randRange(5,10);
+    state.resources.fuel -= randRange(2,5);
+    state.resources.people -= randRange(0,1);
+  } else if (key === 'F') {
+    state.resources.diplomacy += randRange(5,10);
+    state.resources.food -= randRange(2,5);
+  } else if (key === 'G') {
+    state.resources.intelligence += randRange(5,10);
+    state.resources.people -= randRange(0,1);
+    state.resources.trust -= randRange(0,2);
+  }
+}
+
+function randRange(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 
 // Combined content of council.js
 function identifyCurrentIssue(state) {
@@ -309,36 +462,32 @@ function executeProposal(state, choice, proposals) {
 }
 
 async function holdCouncilMeeting(state) {
-    jsPrint(getMessage('council', 'title'));
-
-    const issue = identifyCurrentIssue(state);
-    jsPrint(getMessage('council', 'issue', issue));
-
-    const proposals = generateProposals(state, issue);
-
-    jsPrint(`\n${getMessage('council', 'proposals')}`);
-    let proposalKeys = Object.keys(proposals);
-    for (let i = 0; i < proposalKeys.length; i++) {
-        const key = proposalKeys[i];
-        const proposal = proposals[key];
-        const councillorName = state.councillors[i % state.councillors.length].name;
-        jsPrint(`[${key}] ${councillorName}: "${proposal}" `);
-    }
-
-    jsPrint(`[X] ${getMessage('council', 'dismiss')}`);
-
-    const choice = (await jsInput("\n提案を選択 [A/B/C/D/E/F/G/X]: ")).toUpperCase();
-
-    if (choice === 'X') {
-        state.resources.trust -= 5;
-        jsPrint(getMessage('council', 'meeting_dismissed'));
-    } else if (proposals[choice]) {
-        executeProposal(state, choice, proposals);
-    } else {
-        jsPrint(getMessage('council', 'invalid_choice'));
-        state.resources.trust -= 5;
-    }
-    displayUi(state); // Update UI after action
+  jsPrint(getMessage('council', 'title'));
+  const issue = identifyCurrentIssue(state);
+  jsPrint(getMessage('council', 'issue', issue));
+  const proposals = generateProposals(state, issue);
+  jsPrint(`\n${getMessage('council', 'proposals')}`);
+  const proposalKeys = Object.keys(proposals);
+  for (let i = 0; i < proposalKeys.length; i++) {
+    const key = proposalKeys[i];
+    const proposal = proposals[key];
+    const councillorName = state.councillors[i % state.councillors.length].name;
+    jsPrint(`[${key}] ${councillorName}: "${proposal}" `);
+  }
+  jsPrint(`[X] ${getMessage('council', 'dismiss')}`);
+  const choice = (await jsInput("\n提案を選択 [A/B/C/D/E/F/G/X]: ")).toUpperCase();
+  if (choice === 'X') {
+    state.resources.trust -= 5;
+    jsPrint(getMessage('council', 'meeting_dismissed'));
+  } else if (proposals[choice]) {
+    state.action_queue.push({ type:'proposal', key: choice });
+    jsPrint(`提案 ${choice} を本日の実行キューに追加しました。`);
+  } else {
+    jsPrint(getMessage('council', 'invalid_choice'));
+    state.resources.trust -= 5;
+  }
+  
+  displayUi(state); // Update UI after action
 }
 
 // Combined content of personal_envoy.js
@@ -353,37 +502,32 @@ function getActualSituation(state, investigationType) {
 }
 
 async function sendPersonalEnvoy(state) {
-    if (state.resources.trust < 10) {
-        jsPrint(getMessage('personal_envoy', 'trust_low'));
-        return;
-    }
+  if (state.resources.trust < 10) {
+    jsPrint(getMessage('personal_envoy', 'trust_low'));
+    return;
+  }
+  jsPrint(getMessage('personal_envoy', 'title'));
+  jsPrint(`[A] ${getMessage('personal_envoy', 'investigate_fuel')}`);
+  jsPrint(`[B] ${getMessage('personal_envoy', 'investigate_food')}`);
+  jsPrint(`[C] ${getMessage('personal_envoy', 'investigate_people')}`);
+  jsPrint(`[D] ${getMessage('personal_envoy', 'investigate_scout')}`);
+  jsPrint(`[X] ${getMessage('personal_envoy', 'cancel')}`);
 
-    jsPrint(getMessage('personal_envoy', 'title'));
-    jsPrint(`[A] ${getMessage('personal_envoy', 'investigate_fuel')}`);
-    jsPrint(`[B] ${getMessage('personal_envoy', 'investigate_food')}`);
-    jsPrint(`[C] ${getMessage('personal_envoy', 'investigate_people')}`);
-    jsPrint(`[D] ${getMessage('personal_envoy', 'investigate_scout')}`);
-    jsPrint(`[X] ${getMessage('personal_envoy', 'cancel')}`);
-
-    const choice = (await jsInput(getMessage('personal_envoy', 'prompt'))).toUpperCase();
-
-    if (['A', 'B', 'C', 'D'].includes(choice)) {
-        const costTrust = 5;
-        state.resources.trust -= costTrust;
-
-        const truth = getActualSituation(state, choice);
-        jsPrint(getMessage('personal_envoy', 'report_title'));
-        jsPrint(getMessage('personal_envoy', 'cost', costTrust));
-        jsPrint(getMessage('personal_envoy', 'result'));
-        jsPrint(`> ${truth}`);
-
-        await jsInput(getMessage('personal_envoy', 'continue_prompt'));
-    } else if (choice === 'X') {
-        jsPrint(getMessage('personal_envoy', 'cancelled'));
-    } else {
-        jsPrint(getMessage('personal_envoy', 'invalid_choice'));
-    }
-    displayUi(state); // Update UI after action
+  const choice = (await jsInput(getMessage('personal_envoy', 'prompt'))).toUpperCase();
+  if (['A', 'B', 'C', 'D'].includes(choice)) {
+    const costTrust = 5;
+    state.resources.trust -= costTrust;
+    state.action_queue.push({ type:'envoy', target: choice, cost: costTrust });
+    jsPrint(getMessage('personal_envoy', 'report_title'));
+    jsPrint(getMessage('personal_envoy', 'cost', costTrust));
+    jsPrint("結果は本日の実行後（評定フェーズ）に開示されます。");
+    await jsInput(getMessage('personal_envoy', 'continue_prompt'));
+  } else if (choice === 'X') {
+    jsPrint(getMessage('personal_envoy', 'cancelled'));
+  } else {
+    jsPrint(getMessage('personal_envoy', 'invalid_choice'));
+  }
+  displayUi(state);
 }
 
 // Combined content of game_mechanics.js
@@ -447,6 +591,32 @@ function diplomaticRoll(playerStat, enemyStat, difficulty = 50) {
     const playerRoll = Math.floor(Math.random() * 20) + 1 + playerStat;
     const enemyRoll = Math.floor(Math.random() * 20) + 1 + enemyStat + difficulty;
     return playerRoll >= enemyRoll;
+}
+
+function detectDiscrepanciesAndUpdate(state, reportedLines, actualLines) {
+  // 簡易実装：数字差分や "絶好調/厳しい/安定" キーワードでスコア化
+  const repText = (reportedLines || []).join(' ');
+  const actText = (actualLines || []).join(' ');
+  let suspicionScore = 0;
+  // 数量差の可能性（粗い）
+  const numRep = (repText.match(/\d+/g) || []).map(n=>parseInt(n,10));
+  const numAct = (actText.match(/\d+/g) || []).map(n=>parseInt(n,10));
+  if (numRep.length && numAct.length) {
+    const avgRep = Math.round(numRep.reduce((a,b)=>a+b,0)/numRep.length);
+    const avgAct = Math.round(numAct.reduce((a,b)=>a+b,0)/numAct.length);
+    if (Math.abs(avgRep - avgAct) >= 5) suspicionScore += 1;
+  }
+  // キーワード差
+  if (/絶好調|高いです/.test(repText) && /不足|低下|減/.test(actText)) suspicionScore += 1;
+  if (/異常なし/.test(repText) && /形跡|欺瞞|腐敗/.test(actText)) suspicionScore += 1;
+  if (suspicionScore > 0) {
+    state.resources.trust = Math.max(0, state.resources.trust - suspicionScore * 2);
+    // 将来のために特定役職suspicionを上げるロジックを拡張可能
+    jsPrint(`差異検出: trust-${suspicionScore*2}`);
+  } else {
+    state.resources.trust = Math.min(100, state.resources.trust + 1);
+    jsPrint(`矛盾なし: trust+1`);
+  }
 }
 
 // Combined content of northern_coalition.js
@@ -546,46 +716,38 @@ async function gameLoop() {
     }
 }
 
-// Global functions to be called by index.html buttons
-window.startGame = async function() {
-    // Initialize game state if needed (e.g., reset for new game)
-    // For now, just start the first day
-    await gameLoop(); // Start the first day
+window.startGame = function() {
+  startDaySimple(gameState);
 };
 
 window.performCouncilAction = async function() {
-    await holdCouncilMeeting(gameState);
+  if (gameState.council_done) return;
+  await holdCouncilMeeting(gameState);
+  gameState.council_done = true;
+  updateActionButtons();
 };
 
 window.performEnvoyAction = async function() {
-    await sendPersonalEnvoy(gameState);
+  if (gameState.envoy_done) return;
+  await sendPersonalEnvoy(gameState);
+  gameState.envoy_done = true;
+  updateActionButtons();
 };
 
 window.performResourcesAction = async function() {
-    jsPrint(getMessage('game_loop', 'resource_log_not_implemented'));
-    displayUi(gameState); // Update UI after action
+  jsPrint(getMessage('game_loop', 'resource_log_not_implemented'));
+  displayUi(gameState);
 };
 
-window.performRestAction = async function() {
-    jsPrint(getMessage('game_loop', 'rest'));
-    gameState.day += 1;
-
-    const { fuel, food } = calculateDailyConsumption(gameState);
-    gameState.resources.fuel -= fuel;
-    gameState.resources.food -= food;
-
-    if (gameState.resources.fuel < 0) {
-        gameState.resources.fuel = 0;
-    }
-    if (gameState.resources.food < 0) {
-        gameState.resources.food = 0;
-    }
-    await gameLoop(); // Process the next day
+window.performRestAction = function() {
+  // その日の行動をまとめて適用
+  const opsLog = applyOperations(gameState);
+  gameState.logs.actual[gameState.day] = (gameState.logs.actual[gameState.day] || []).concat(opsLog);
+  // 資源消費
+  const { fuel, food } = calculateDailyConsumption(gameState);
+  gameState.resources.fuel = Math.max(0, gameState.resources.fuel - fuel);
+  gameState.resources.food = Math.max(0, gameState.resources.food - food);
+  // 日数＋1
+  gameState.day++;
+  startDaySimple(gameState);
 };
-
-// Initial UI update when the page loads (before game starts)
-// This will display Day 1 and initial resources
-if (typeof window.updateDayDisplay === 'function' && typeof window.updateResourcesDisplay === 'function') {
-    window.updateDayDisplay(gameState.day);
-    window.updateResourcesDisplay(gameState.resources);
-}
