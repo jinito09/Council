@@ -108,20 +108,17 @@ function initializeCouncillors() {
     { name: 'David Kim', role: 'Personnel Chief' },
     { name: 'Sarah Johnson', role: 'Scout Leader' }
   ];
-  for (const councillor of councillors) {
-    const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-    let randomValue = Math.random() * totalWeight;
-    let chosenAgenda = '';
+  for (const c of councillors) {
+    const total = weights.reduce((s,w)=>s+w,0);
+    let r = Math.random() * total;
+    let chosen = agendas; // This line is different from the previous patch
     for (let i = 0; i < agendas.length; i++) {
-      randomValue -= weights[i];
-      if (randomValue <= 0) {
-        chosenAgenda = agendas[i];
-        break;
-      }
+      r -= weights[i];
+      if (r <= 0) { chosen = agendas[i]; break; }
     }
-    councillor.secret_agenda = chosenAgenda;
-    councillor.loyalty = Math.random() * (0.9 - 0.4) + 0.4;
-    councillor.suspicion = 0;
+    c.secret_agenda = chosen;
+    c.loyalty = Math.random() * (0.9 - 0.4) + 0.4;
+    c.suspicion = 0;
   }
   return councillors;
 }
@@ -288,15 +285,14 @@ function generateCouncillorReport(councillor, state) {
 }
 
 function displayUi(state) {
-  if (typeof window.updateDayDisplay === 'function') {
-    window.updateDayDisplay(state.day);
-  }
-  if (typeof window.updateResourcesDisplay === 'function') {
-    window.updateResourcesDisplay(state.resources);
-  }
+  if (typeof window.updateDayDisplay === 'function') window.updateDayDisplay(state.day);
+  if (typeof window.updateResourcesDisplay === 'function') window.updateResourcesDisplay(state.resources);
   jsPrint(`${getMessage('ui', 'daily_reports', state.day)}`);
-  const reports = state.logs.reported[state.day] || generateDailyReports(state);
-  for (const report of reports) jsPrint(report);
+  const stored = state.logs.reported[state.day];
+  const lines = stored
+    ? stored.map(o => `> ${o.councillor.name}: '${o.text}'`)
+    : generateDailyReports(state);
+  for (const line of lines) jsPrint(line);
   jsPrint("- ".repeat(40));
 }
 
