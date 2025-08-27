@@ -572,10 +572,10 @@ function checkIntermediateGoals(state) {
 function checkVictoryConditions(state) {
   if (state.day > 30) {
     const { trust, people } = state.resources;
-    const totalResources = Object.values(state.resources).reduce((sum, v) => sum + v, 0);
-    if (trust >= 70 && people >= 70 && totalResources >= 300) return getMessage('victory','perfect');
+    const total = Object.values(state.resources).reduce((s, v) => s + v, 0);
+    if (trust >= 70 && people >= 70 && total >= 300) return getMessage('victory','perfect');
     if (trust >= 60) return getMessage('victory','trust');
-    if (totalResources >= 200) return getMessage('victory','stable');
+    if (total >= 200) return getMessage('victory','stable');
     return getMessage('victory','survival');
   }
   return null;
@@ -622,37 +622,40 @@ window.performResourcesAction = function() {
   const actual = gameState.logs.actual[d] || [];
   const nextUse = calculateDailyConsumption(gameState);
   jsPrint(getMessage('ui','reported_summary'));
-  reported.forEach(r=>jsPrint(r));
+  reported.forEach(r => {
+    if (typeof r === 'string') jsPrint(r);
+    else jsPrint(`> ${r.councillor?.name ?? '?'}: '${r.text ?? r}'`);
+  });
   jsPrint(getMessage('ui','ops_summary'));
-  actual.forEach(a=>jsPrint(a));
+  actual.forEach(a => jsPrint(typeof a === 'string' ? a : JSON.stringify(a)));
   jsPrint(`次日予測消費: fuel -${nextUse.fuel}, food -${nextUse.food}`);
 };
 
 window.performRestAction = function() {
   const opsLog = applyOperations(gameState);
   gameState.logs.actual[gameState.day] = (gameState.logs.actual[gameState.day] || []).concat(opsLog);
-  
+
   const { fuel, food } = calculateDailyConsumption(gameState);
   gameState.resources.fuel = Math.max(0, gameState.resources.fuel - fuel);
   gameState.resources.food = Math.max(0, gameState.resources.food - food);
-  
-  checkIntermediateGoals(gameState); // Call intermediate goal check
+
+  checkIntermediateGoals(gameState);
 
   const defeatCondition = checkDefeatConditions(gameState);
   if (defeatCondition) {
-      jsPrint(`\n${defeatCondition}`);
-      // Disable all buttons or show a game over screen
-      window.toggleActionButtons(false);
-      return;
+    jsPrint(`\n${defeatCondition}`);
+    window.toggleActionButtons(false);
+    return;
   }
 
   const victoryCondition = checkVictoryConditions(gameState);
   if (victoryCondition) {
-      jsPrint(`\n${victoryCondition}`);
-      window.toggleActionButtons(false);
-      return;
+    jsPrint(`\n${victoryCondition}`);
+    window.toggleActionButtons(false);
+    return;
   }
 
   gameState.day++;
   startDaySimple(gameState);
 };
+

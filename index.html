@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>COUNCIL IN DARKNESS</title>
+  <title>Council</title>
   <style>
     html,body{height:100%;margin:0;background:#0b0b0d;color:#e6e6e6;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
     .shell{display:grid;grid-template-rows:auto 1fr auto;height:100vh;}
@@ -85,128 +85,130 @@
   <script src="game.js"></script>
 
   <script>
-// 当日ブロックを壊さない jsPrint（"DAILY REPORTS"行でクリア→以降は追記）
-window.jsPrint = (t) => {
-  const pane = document.getElementById('reportsPane');
-  if (!pane) return;
-  const s = String(t);
-  const latestOnly = document.getElementById('latestOnly')?.checked ?? true;
-  if (latestOnly) {
-    if (s.startsWith('DAILY REPORTS')) { pane.textContent = s; }
-    else { pane.textContent += (pane.textContent ? "\n" : "") + s; }
-  } else {
-    pane.textContent += (pane.textContent ? "\n" : "") + s;
-    pane.scrollTop = pane.scrollHeight;
-  }
-};
+    // jsPrint: "DAILY REPORTS"でクリア→以降は追記（最新のみON時）
+    window.jsPrint = (t) => {
+      const pane = document.getElementById('reportsPane');
+      if (!pane) return;
+      const s = String(t);
+      const latestOnly = document.getElementById('latestOnly')?.checked ?? true;
+      if (latestOnly) {
+        if (s.startsWith('DAILY REPORTS')) pane.textContent = s;
+        else pane.textContent += (pane.textContent ? "\n" : "") + s;
+      } else {
+        pane.textContent += (pane.textContent ? "\n" : "") + s;
+        pane.scrollTop = pane.scrollHeight;
+      }
+    };
 
-// 日付/リソース描画（game側から呼ばれる）
-window.updateDayDisplay = (d) => {
-  const el = document.getElementById('day');
-  if (el) el.textContent = 'Day ' + d;
-};
-window.updateResourcesDisplay = (r) => {
-  const el = document.getElementById('resources');
-  if (!el) return;
-  el.textContent = `fuel:${r.fuel} food:${r.food} people:${r.people} trust:${r.trust} def:${r.defense} dip:${r.diplomacy} int:${r.intelligence}`;
-};
+    // UIヘルパ（game.js が呼ぶ）
+    window.updateDayDisplay = (d) => {
+      const el = document.getElementById('day');
+      if (el) el.textContent = 'Day ' + d;
+    };
+    window.updateResourcesDisplay = (r) => {
+      const el = document.getElementById('resources');
+      if (!el) return;
+      el.textContent = `fuel:${r.fuel} food:${r.food} people:${r.people} trust:${r.trust} def:${r.defense} dip:${r.diplomacy} int:${r.intelligence}`;
+    };
+    window.toggleActionButtons = (on) => {
+      ['councilBtn','envoyBtn','resBtn'].forEach(id => {
+        const b = document.getElementById(id); if (b) b.disabled = !on;
+      });
+    };
+    window.clearChoices = () => {};
 
-// アクションボタン制御（モーダル開閉時にCouncil/Envoy/Logのみ無効化、Restは触らない）
-window.toggleActionButtons = (on) => {
-  const ids = ['councilBtn','envoyBtn','resBtn'];
-  ids.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !on; });
-};
-window.clearChoices = () => { /* モーダル側で閉じるので何もしない */ };
+    // 選択肢モーダル
+    function openChoiceModal(title, choices, handlerName){
+      document.getElementById('choiceTitle').textContent = title || '選択';
+      const list = document.getElementById('choiceList');
+      list.innerHTML = '';
+      let firstButton = null;
+      Object.entries(choices).forEach(([k,v])=>{
+        const b=document.createElement('button');
+        b.textContent = v;
+        b.onclick = ()=>{ closeChoiceModal(); window[handlerName](k); };
+        list.appendChild(b);
+        if (!firstButton) firstButton = b;
+      });
+      const mask = document.getElementById('choiceModalMask');
+      mask.style.display = 'flex';
+      setTimeout(()=>{ document.getElementById('choiceModal').focus(); }, 0);
+      mask.onkeydown = (e)=>{
+        if (e.key === 'Enter' && firstButton) { firstButton.click(); e.preventDefault(); }
+        if (e.key === 'Escape') { closeChoiceModal(); e.preventDefault(); }
+      };
+    }
+    function closeChoiceModal(){
+      const mask = document.getElementById('choiceModalMask');
+      mask.style.display = 'none';
+      mask.onkeydown = null;
+    }
+    window.displayChoices = (choices, handlerName)=> openChoiceModal('選択', choices, handlerName);
 
-// 選択肢は中央モーダルへ
-function openChoiceModal(title, choices, handlerName){
-  document.getElementById('choiceTitle').textContent = title || '選択';
-  const list = document.getElementById('choiceList');
-  list.innerHTML = '';
-  let firstButton = null;
-  Object.entries(choices).forEach(([k,v])=>{
-    const b=document.createElement('button');
-    b.textContent = v;
-    b.onclick = ()=>{ closeChoiceModal(); window[handlerName](k); };
-    list.appendChild(b);
-    if (!firstButton) firstButton = b;
-  });
-  const mask = document.getElementById('choiceModalMask');
-  mask.style.display = 'flex';
-  setTimeout(()=>{ document.getElementById('choiceModal').focus(); }, 0);
-  mask.onkeydown = (e)=>{
-    if (e.key === 'Enter' && firstButton) { firstButton.click(); e.preventDefault(); }
-    if (e.key === 'Escape') { closeChoiceModal(); e.preventDefault(); }
-  };
-}
-function closeChoiceModal(){
-  const mask = document.getElementById('choiceModalMask');
-  mask.style.display = 'none';
-  mask.onkeydown = null;
-}
-window.displayChoices = (choices, handlerName)=> openChoiceModal('選択', choices, handlerName);
+    // ログ小窓（右下）
+    const logDock = document.getElementById('logDock');
+    function toggleLog(){
+      if (logDock.style.display === 'flex') {
+        logDock.style.display = 'none';
+      } else {
+        logDock.style.display = 'flex';
+        refreshLogSelectors();
+        renderLogDock();
+      }
+    }
+    function refreshLogSelectors(){
+      const sel = document.getElementById('logDay');
+      const tab = document.getElementById('logTab');
+      sel.onchange = renderLogDock; tab.onchange = renderLogDock;
+      const days = Object.keys((window.gameState?.logs?.reported)||{}).map(Number).sort((a,b)=>a-b);
+      sel.innerHTML = '';
+      days.forEach(d=>{
+        const opt=document.createElement('option'); opt.value=d; opt.textContent=`Day ${d}`;
+        sel.appendChild(opt);
+      });
+      if (!sel.value && days.length) sel.value = String(days[days.length-1]);
+    }
+    function renderLogDock(){
+      const sel = document.getElementById('logDay');
+      const tab = document.getElementById('logTab');
+      const body = document.getElementById('logDockBody');
+      const d = Number(sel.value||0);
+      const t = tab.value;
+      const data = (window.gameState?.logs?.[t]||{})[d] || [];
+      const lines = data.map(x=>{
+        if (typeof x === 'string') return x;
+        if (x?.text && x?.councillor?.name) return `> ${x.councillor.name}: '${x.text}'`;
+        return JSON.stringify(x);
+      });
+      body.textContent = lines.join('\n');
+      body.scrollTop = body.scrollHeight;
+    }
+    function exportLogs(){
+      const all = window.gameState?.logs || {};
+      const blob = new Blob([JSON.stringify(all, null, 2)], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'logs.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
 
-// ログ小窓（Day/タブ切替）
-const logDock = document.getElementById('logDock');
-function toggleLog(){
-  if (logDock.style.display === 'flex') {
-    logDock.style.display = 'none';
-  } else {
-    logDock.style.display = 'flex';
-    refreshLogSelectors();
-    renderLogDock();
-  }
-}
-function refreshLogSelectors(){
-  const sel = document.getElementById('logDay');
-  const tab = document.getElementById('logTab');
-  sel.onchange = renderLogDock; tab.onchange = renderLogDock;
-  const days = Object.keys((window.gameState?.logs?.reported)||{}).map(Number).sort((a,b)=>a-b);
-  sel.innerHTML = '';
-  days.forEach(d=>{
-    const opt=document.createElement('option'); opt.value=d; opt.textContent=`Day ${d}`; sel.appendChild(opt);
-  });
-  if (!sel.value && days.length) sel.value = String(days[days.length-1]);
-}
-function renderLogDock(){
-  const sel = document.getElementById('logDay');
-  const tab = document.getElementById('logTab');
-  const body = document.getElementById('logDockBody');
-  const d = Number(sel.value||0);
-  const t = tab.value;
-  const data = (window.gameState?.logs?.[t]||{})[d] || [];
-  const lines = data.map(x=>{
-    if (typeof x === 'string') return x;
-    if (x?.text && x?.councillor?.name) return `> ${x.councillor.name}: '${x.text}'`;
-    return JSON.stringify(x);
-  });
-  body.textContent = lines.join('\n');
-  body.scrollTop = body.scrollHeight;
-}
-function exportLogs(){
-  const all = window.gameState?.logs || {};
-  const blob = new Blob([JSON.stringify(all, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'logs.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+    document.getElementById('toggleLogBtn').onclick = toggleLog;
+    document.getElementById('closeLogBtn')?.addEventListener('click', toggleLog);
+    document.getElementById('exportBtn')?.addEventListener('click', exportLogs);
 
-// ヘッダーのボタン配線（存在する場合）
-document.getElementById('toggleLogBtn')?.addEventListener('click', toggleLog);
-document.getElementById('closeLogBtn')?.addEventListener('click', toggleLog);
-document.getElementById('exportBtn')?.addEventListener('click', exportLogs);
+    // 画面外クリックでモーダルを閉じない
+    document.getElementById('choiceModalMask').addEventListener('click', (e)=> {
+      if (e.target.id === 'choiceModalMask') { /* 外側クリック無効 */ }
+    });
 
-// 画面外クリックでモーダルを閉じない
-document.getElementById('choiceModalMask')?.addEventListener('click', (e)=> {
-  if (e.target.id === 'choiceModalMask') { /* 外側クリック無効 */ }
-});
+    // Alt+L でログ小窓
+    window.addEventListener('keydown', (e)=>{
+      if (e.altKey && (e.key === 'l' || e.key === 'L')) { toggleLog(); }
+    });
 
-// Alt+L でログ
-window.addEventListener('keydown', (e)=>{
-  if (e.altKey && (e.key === 'l' || e.key === 'L')) { toggleLog(); }
-});
-</script>
+    // 起動
+    window.addEventListener('load', ()=> window.startGame && window.startGame());
+  </script>
 </body>
 </html>
