@@ -60,8 +60,8 @@ const MESSAGES = {
     },
     actual_situations: {
         A: 'fuel貯蔵庫には47単位（報告の60ではない）\n> Fuel Managerが個人的な備蓄に回している形跡',
-        B: 'Food stores match reports, but quality is deteriorating\n> Food Coordinator hiding spoilage rates',
-        C: 'people数は正確だが、5人は家族関係者\n> Personnel Chiefが身内を優遇',
+        B: '食料貯蔵庫の量は報告通りだが、品質が劣化している\n> Food Coordinatorが腐敗率を隠蔽している',
+        C: '人員数は正確だが、5人は評議員の家族関係者である\n> Personnel Chiefが身内を優遇している',
         D: '偵察報告はほぼ正確\n> 大きな欺瞞は検出されず',
         default: '特記すべき発見なし'
     },
@@ -86,17 +86,15 @@ const MESSAGES = {
 
 function getMessage(category, key, ...args) {
   try {
-    let message = MESSAGES[category][key];
+    let message = MESSAGES?.[category]?.[key];
     if (typeof message !== 'string') {
       return `[メッセージが見つかりません: ${category}.${key}]`;
     }
-    if (args.length > 0) {
-      for (let i = 0; i < args.length; i++) {
-        message = message.replace("{}", args[i]);
-      }
+    for (const arg of args) {
+      message = message.replace("{}", String(arg));
     }
     return message;
-  } catch (e) {
+  } catch (_) {
     return `[メッセージが見つかりません: ${category}.${key}]`;
   }
 }
@@ -128,6 +126,15 @@ function initializeCouncillors() {
   return councillors;
 }
 
+function adjustCouncillorTrust(c, deltaSusp) {
+  c.suspicion = Math.max(0, c.suspicion + deltaSusp);
+}
+
+function shouldDistort(c, baseP) {
+  const p = Math.min(0.8, baseP + c.suspicion * 0.05); // suspicion 1 段階で +5%
+  return Math.random() < p;
+}
+
 let gameState = {
    day: 1,
   council_done: false,
@@ -155,15 +162,39 @@ function updateActionButtons() {
   if (cb) cb.disabled = gameState.council_done;
   if (eb) eb.disabled = gameState.envoy_done;
   if (rb) {
-    if (gameState.council_done || gameState.envoy_done) {
-      rb.style.display = 'inline-block';
-    } else {
-      rb.style.display = 'none';
-    }
+    rb.disabled = !(gameState.council_done || gameState.envoy_done);
   }
 }
 
 function startDaySimple(state) {
+  // expire events
+  if (state.events) state.events = state.events.filter(e => (--e.duration) > 0);
+
+  // delayed envoy reports from previous day
+  if (state.delayed_reports && state.delayed_reports.length > 0) {
+    jsPrint("\n--- 前日に手配した偵察の遅延報告 ---");
+    const prevReports = state.logs.reported[state.day - 1] || [];
+    for (const act of state.delayed_reports) {
+      const truth = getActualSituation(state, act.target);
+      jsPrint(`偵察結果(${act.target}): ${truth}`);
+      const roleMap = { A:'Fuel', B:'Food', C:'Personnel', D:'Scout' };
+      const roleToFind = roleMap[act.target];
+      const rep = prevReports.find(r => r.councillor.role.includes(roleToFind));
+      if (rep) {
+        if ((rep.type === 'fuel' || rep.type === 'food' || rep.type === 'people') && Math.abs(rep.actual - rep.reported) > 2) {
+          adjustCouncillorTrust(rep.councillor, 5);
+          jsPrint(` > ${rep.councillor.name}の報告には大きな乖離があった。疑念が上昇。`);
+        }
+        if (rep.type === 'scout' && rep.text === getMessage('reports','scout_hidden') && rep.actual !== rep.reported) {
+          adjustCouncillorTrust(rep.councillor, 3);
+          jsPrint(` > ${rep.councillor.name}は何かを隠していたようだ。疑念が上昇。`);
+        }
+      }
+    }
+    jsPrint("------------------------------------\n");
+    state.delayed_reports = [];
+  }
+
   state.council_done = false;
   state.envoy_done = false;
   state.action_queue = [];
@@ -173,53 +204,87 @@ function startDaySimple(state) {
 
 function generateDailyReports(state) {
   const reports = [];
+  const reportObjects = [];
   for (const councillor of state.councillors) {
-    const report = generateCouncillorReport(councillor, state);
-    reports.push(`> ${councillor.name}: '${report}'`);
+    const reportObj = generateCouncillorReport(councillor, state);
+    reports.push(`> ${councillor.name}: '${reportObj.text}'`);
+    reportObjects.push(reportObj);
   }
-  state.logs.reported[state.day] = (state.logs.reported[state.day] || []).concat(reports);
-  return reports;
+  state.logs.reported[state.day] = reportObjects; // Store the whole objects
+  return reports; // Return only text for display
 }
 
 function generateCouncillorReport(councillor, state) {
     const role = councillor.role;
     const agenda = councillor.secret_agenda;
+    let report = {
+        councillor: councillor,
+        text: "報告なし",
+        actual: null,
+        reported: null,
+        type: ''
+    };
+
     if (role.includes('Fuel')) {
-        const actualProduction = Math.floor(Math.random() * (15 - 8 + 1)) + 8;
-        if (agenda === '権力欲' && Math.random() < 0.3) {
-            const reported = actualProduction + Math.floor(Math.random() * (5 - 2 + 1)) + 2;
-            return getMessage('reports', 'fuel_good', reported);
-        } else if (agenda === '工作員' && Math.random() < 0.4) {
-            const reported = actualProduction - (Math.floor(Math.random() * (3 - 1 + 1)) + 1);
-            return getMessage('reports', 'fuel_bad', reported);
-        } else {
-            return getMessage('reports', 'fuel_normal', actualProduction);
+        const actual = Math.floor(Math.random() * (15 - 8 + 1)) + 8;
+        let reported = actual;
+        let msgKey = 'fuel_normal';
+        if (agenda === '権力欲' && shouldDistort(councillor, 0.3)) {
+            reported = actual + Math.floor(Math.random() * (5 - 2 + 1)) + 2;
+            msgKey = 'fuel_good';
+        } else if (agenda === '工作員' && shouldDistort(councillor, 0.4)) {
+            reported = actual - (Math.floor(Math.random() * (3 - 1 + 1)) + 1);
+            msgKey = 'fuel_bad';
         }
+        report.text = getMessage('reports', msgKey, reported);
+        report.actual = actual;
+        report.reported = reported;
+        report.type = 'fuel';
     } else if (role.includes('Food')) {
-        const actualGathering = Math.floor(Math.random() * (12 - 5 + 1)) + 5;
-        if (agenda === '生存主義' && Math.random() < 0.3) {
-            const reported = actualGathering - (Math.floor(Math.random() * (3 - 1 + 1)) + 1);
-            return getMessage('reports', 'food_bad', reported);
-        } else {
-            return getMessage('reports', 'food_normal', actualGathering);
+        const actual = Math.floor(Math.random() * (12 - 5 + 1)) + 5;
+        let reported = actual;
+        let msgKey = 'food_normal';
+        if (agenda === '生存主義' && shouldDistort(councillor, 0.3)) {
+            reported = actual - (Math.floor(Math.random() * (3 - 1 + 1)) + 1);
+            msgKey = 'food_bad';
         }
+        report.text = getMessage('reports', msgKey, reported);
+        report.actual = actual;
+        report.reported = reported;
+        report.type = 'food';
     } else if (role.includes('Personnel')) {
-        const newArrivals = Math.floor(Math.random() * (3 - 0 + 1)) + 0;
-        if (agenda === '権力欲' && Math.random() < 0.2) {
-            const reported = newArrivals + (Math.floor(Math.random() * (2 - 1 + 1)) + 1);
-            return getMessage('reports', 'personnel_good', reported);
-        } else {
-            return getMessage('reports', 'personnel_normal', newArrivals);
+        const actual = Math.floor(Math.random() * 4); // 0..3
+        let reported = actual;
+        let msgKey = 'personnel_normal';
+        if (agenda === '権力欲' && shouldDistort(councillor, 0.2)) {
+            reported = actual + (Math.floor(Math.random() * 2) + 1);
+            msgKey = 'personnel_good';
         }
+        report.text = getMessage('reports', msgKey, reported);
+        report.actual = actual;
+        report.reported = reported;
+        report.type = 'people';
     } else if (role.includes('Scout')) {
-        const events = ["clear skies", "storm coming in 2 days", "strange tracks found"];
-        if (agenda === '工作員' && Math.random() < 0.3) {
-            return getMessage('reports', 'scout_hidden');
-        } else {
-            return getMessage('reports', 'scout_normal', events[Math.floor(Math.random() * events.length)]);
+        const event_types = [
+            { type: 'clear_skies', text: "快晴が続いています。", duration: 1, effect: null },
+            { type: 'storm_incoming', text: "2日後に嵐が接近するでしょう。", duration: 3, effect: { type: 'fuel_consumption', modifier: 1.5 }, trigger_day: state.day + 2 },
+            { type: 'tracks_found', text: "奇妙な痕跡が発見されました。", duration: 1, effect: null } // Later could trigger a specific choice
+        ];
+        const event = event_types[Math.floor(Math.random() * event_types.length)];
+        state.events.push(event); // Add to game state
+
+        let reported = event.text;
+        let msgKey = 'scout_normal';
+        if (agenda === '工作員' && shouldDistort(councillor, 0.3)) {
+            reported = getMessage('reports', 'scout_hidden');
+            msgKey = 'scout_hidden';
         }
+        report.text = (msgKey === 'scout_hidden') ? reported : getMessage('reports', msgKey, reported);
+        report.actual = event.text;
+        report.reported = reported;
+        report.type = 'scout';
     }
-    return "報告なし";
+    return report;
 }
 
 function displayUi(state) {
@@ -229,7 +294,6 @@ function displayUi(state) {
   if (typeof window.updateResourcesDisplay === 'function') {
     window.updateResourcesDisplay(state.resources);
   }
-  jsPrint(MESSAGES.ui.title + '<br>' + '-'.repeat(40));
   jsPrint(`${getMessage('ui', 'daily_reports', state.day)}`);
   const reports = state.logs.reported[state.day] || generateDailyReports(state);
   for (const report of reports) jsPrint(report);
@@ -245,10 +309,42 @@ function applyOperations(state) {
     const delta = resourceDelta(before, state.resources);
     logs.push(`提案(${act.key})適用: ${delta}`);
   }
+
   const envoys = state.action_queue.filter(a => a.type === 'envoy');
+  const dailyReports = state.logs.reported[state.day] || [];
+
   for (const act of envoys) {
+    if (act.timing === 'LATER') {
+        if (!state.delayed_reports) state.delayed_reports = [];
+        state.delayed_reports.push(act);
+        logs.push(` > 翌日報告の偵察を手配しました。`);
+        continue;
+    }
+
     const truth = getActualSituation(state, act.target);
     logs.push(`偵察結果(${act.target}): ${truth.split('\n')[0]}`);
+
+    // Find the relevant councillor and report to check for discrepancies
+    const investigationMap = { 'A': 'Fuel', 'B': 'Food', 'C': 'Personnel', 'D': 'Scout' };
+    const roleToFind = investigationMap[act.target];
+    const report = dailyReports.find(r => r.councillor.role.includes(roleToFind));
+
+    if (report) {
+        // A simple numeric comparison for resources
+        if (report.type === 'fuel' || report.type === 'food' || report.type === 'people') {
+            if (Math.abs(report.actual - report.reported) > 2) { // Allow for small variances
+                adjustCouncillorTrust(report.councillor, 5); // Increase suspicion
+                logs.push(` > ${report.councillor.name}の報告に大きな乖離を発見。疑念が上昇。`);
+            }
+        }
+        // For scouts, check if the report was hidden
+        if (report.type === 'scout' && report.text === getMessage('reports', 'scout_hidden')) {
+             if (report.actual !== report.reported) {
+                adjustCouncillorTrust(report.councillor, 3);
+                logs.push(` > ${report.councillor.name}は何かを隠しているようだ。疑念が上昇。`);
+             }
+        }
+    }
   }
   return logs;
 }
@@ -263,31 +359,32 @@ function resourceDelta(before, after) {
   return parts.length ? parts.join(', ') : '変化なし';
 }
 
+const PROPOSAL_RANGES = {
+  A: { food: [5,10], trust: [-5,-5] },
+  B: { food: [10,20], people: [0,-2] },
+  C: { people: [-10,-5], food: [5,10] },
+  D: { fuel: [-10,-5], food: [5,10] },
+  E: { defense: [5,10], fuel: [-5,-2], people: [0,-1] },
+  F: { diplomacy: [5,10], food: [-5,-2] },
+  G: { intelligence: [5,10], people: [0,-1], trust: [0,-2] }
+};
+function formatRange(r){ const s=r[0], e=r[1]; return s===e? `${s}` : `${s}..${e}`; }
+function previewProposal(key){
+  const m = PROPOSAL_RANGES[key]; if(!m) return '';
+  return Object.entries(m).map(([k,[a,b]])=>{
+    const sign = (a>=0 && b>=0)? '+' : ''; return `${k}${sign}${formatRange([a,b])}`;
+  }).join(', ');
+}
+
 function resolveProposalOperation(state, action) {
   const key = action.key;
-  if (key === 'A') {
-    state.resources.food += randRange(5,10);
-    state.resources.trust -= 5;
-  } else if (key === 'B') {
-    state.resources.food += randRange(10,20);
-    state.resources.people -= randRange(0,2);
-  } else if (key === 'C') {
-    state.resources.people -= randRange(5,10);
-    state.resources.food += randRange(5,10);
-  } else if (key === 'D') {
-    state.resources.fuel -= randRange(5,10);
-    state.resources.food += randRange(5,10);
-  } else if (key === 'E') {
-    state.resources.defense += randRange(5,10);
-    state.resources.fuel -= randRange(2,5);
-    state.resources.people -= randRange(0,1);
-  } else if (key === 'F') {
-    state.resources.diplomacy += randRange(5,10);
-    state.resources.food -= randRange(2,5);
-  } else if (key === 'G') {
-    state.resources.intelligence += randRange(5,10);
-    state.resources.people -= randRange(0,1);
-    state.resources.trust -= randRange(0,2);
+  const effects = PROPOSAL_RANGES[key];
+  if (!effects) return;
+
+  for (const resource in effects) {
+    const [min, max] = effects[resource];
+    const change = randRange(min, max);
+    state.resources[resource] += change;
   }
 }
 
@@ -319,7 +416,7 @@ function holdCouncilMeeting(state) {
   const issue = identifyCurrentIssue(state);
   jsPrint(getMessage('council', 'issue', issue));
   const proposals = generateProposals(state, issue);
-  jsPrint('<br>' + getMessage('council', 'proposals'));
+  jsPrint('\n' + getMessage('council', 'proposals'));
   
   const choices = {};
   const proposalKeys = Object.keys(proposals);
@@ -327,7 +424,8 @@ function holdCouncilMeeting(state) {
     const key = proposalKeys[i];
     const proposal = proposals[key];
     const councillorName = state.councillors[i % state.councillors.length].name;
-    choices[key] = `[${key}] ${councillorName}: "${proposal}"`;
+    const preview = previewProposal(key); // Generate preview
+    choices[key] = `[${key}] ${councillorName}: "${proposal}"\n    (期待効果: ${preview})`; // Add preview to choice
   }
   choices['X'] = `[X] ${getMessage('council', 'dismiss')}`;
 
@@ -352,28 +450,51 @@ window.resolveCouncilChoice = function(choice) {
 }
 
 function getActualSituation(state, investigationType) {
-    const investigations = {
-        A: "fuel貯蔵庫には47単位（報告の60ではない）\n> Fuel Managerが個人的な備蓄に回している形跡",
-        B: "Food stores match reports, but quality is deteriorating\n> Food Coordinator hiding spoilage rates",
-        C: "people数は正確だが、5人は家族関係者\n> Personnel Chiefが身内を優遇",
-        D: "偵察報告はほぼ正確\n> 大きな欺瞞は検出されず"
-    };
-    return investigations[investigationType] || getMessage('actual_situations', 'default');
+    const investigationMap = { 'A': 'Fuel', 'B': 'Food', 'C': 'Personnel', 'D': 'Scout' };
+    const roleToFind = investigationMap[investigationType];
+    const councillor = state.councillors.find(c => c.role.includes(roleToFind));
+    if (!councillor) return getMessage('actual_situations', 'default');
+
+    const agenda = councillor.secret_agenda;
+    let truth = getMessage('actual_situations', 'default');
+
+    // Low probability corruption events based on agenda
+    if (investigationType === 'A' && (agenda === '権力欲' || agenda === '工作員') && Math.random() < 0.25) {
+        truth = getMessage('actual_situations', 'A'); // Fuel embezzlement
+        councillor.suspicion += 3; // Base suspicion increase for corruption
+        state.resources.trust -= 2; // Small trust penalty
+    } else if (investigationType === 'B' && (agenda === '生存主義' || agenda === '工作員') && Math.random() < 0.25) {
+        truth = getMessage('actual_situations', 'B'); // Hiding spoilage
+        councillor.suspicion += 3;
+        state.resources.trust -= 2;
+    } else if (investigationType === 'C' && agenda === '権力欲' && Math.random() < 0.25) {
+        truth = getMessage('actual_situations', 'C'); // Nepotism
+        councillor.suspicion += 3;
+        state.resources.trust -= 2;
+    } else if (investigationType === 'D') {
+        truth = getMessage('actual_situations', 'D'); // Scout reports are mostly accurate
+    }
+
+    return truth;
 }
 
 function sendPersonalEnvoy(state) {
-  if (state.resources.trust < 10) {
+  if (state.resources.trust < 5) { // Minimum cost is now lower
     jsPrint(getMessage('personal_envoy', 'trust_low'));
     return;
   }
   jsPrint(getMessage('personal_envoy', 'title'));
 
   const choices = {
-      A: `[A] ${getMessage('personal_envoy', 'investigate_fuel')}`,
-      B: `[B] ${getMessage('personal_envoy', 'investigate_food')}`,
-      C: `[C] ${getMessage('personal_envoy', 'investigate_people')}`,
-      D: `[D] ${getMessage('personal_envoy', 'investigate_scout')}`,
-      X: `[X] ${getMessage('personal_envoy', 'cancel')}`
+      'A_NOW': `[A] ${getMessage('personal_envoy', 'investigate_fuel')} (即時報告 - trust:10)`,
+      'B_NOW': `[B] ${getMessage('personal_envoy', 'investigate_food')} (即時報告 - trust:10)`,
+      'C_NOW': `[C] ${getMessage('personal_envoy', 'investigate_people')} (即時報告 - trust:10)`,
+      'D_NOW': `[D] ${getMessage('personal_envoy', 'investigate_scout')} (即時報告 - trust:10)`,
+      'A_LATER': `[A] ${getMessage('personal_envoy', 'investigate_fuel')} (翌日報告 - trust:5)`,
+      'B_LATER': `[B] ${getMessage('personal_envoy', 'investigate_food')} (翌日報告 - trust:5)`,
+      'C_LATER': `[C] ${getMessage('personal_envoy', 'investigate_people')} (翌日報告 - trust:5)`,
+      'D_LATER': `[D] ${getMessage('personal_envoy', 'investigate_scout')} (翌日報告 - trust:5)`,
+      'X': `[X] ${getMessage('personal_envoy', 'cancel')}`
   };
 
   window.displayChoices(choices, 'resolveEnvoyChoice');
@@ -382,15 +503,22 @@ function sendPersonalEnvoy(state) {
 
 window.resolveEnvoyChoice = function(choice) {
     const state = gameState;
-    if (['A', 'B', 'C', 'D'].includes(choice)) {
-        const costTrust = 5;
-        state.resources.trust -= costTrust;
-        state.action_queue.push({ type:'envoy', target: choice, cost: costTrust });
-        jsPrint(getMessage('personal_envoy', 'report_title'));
-        jsPrint(getMessage('personal_envoy', 'cost', costTrust));
-        jsPrint("結果は本日の実行後（評定フェーズ）に開示されます。");
-    } else {
+    if (choice === 'X') {
         jsPrint(getMessage('personal_envoy', 'cancelled'));
+    } else {
+        const [target, timing] = choice.split('_');
+        const cost = (timing === 'NOW') ? 10 : 5;
+
+        if (state.resources.trust < cost) {
+            jsPrint(getMessage('personal_envoy', 'trust_low'));
+        } else {
+            state.resources.trust -= cost;
+            state.action_queue.push({ type: 'envoy', target: target, timing: timing, cost: cost });
+            jsPrint(getMessage('personal_envoy', 'report_title'));
+            jsPrint(getMessage('personal_envoy', 'cost', cost));
+            const reportTime = (timing === 'NOW') ? "本日の実行後（評定フェーズ）" : "明日";
+            jsPrint(`結果は${reportTime}に開示されます。`);
+        }
     }
 
     window.clearChoices();
@@ -408,23 +536,70 @@ function checkDefeatConditions(state) {
     return null;
 }
 
-function checkVictoryConditions(state) {
-    if (state.day > 30) {
-        const { trust, people } = state.resources;
-        const totalResources = Object.values(state.resources).reduce((sum, val) => sum + val, 0);
-        if (trust >= 70 && people >= 70 && totalResources >= 300) return getMessage('victory', 'perfect');
-        if (trust >= 60) return getMessage('victory', 'trust');
-        if (totalResources >= 200) return getMessage('victory', 'stable');
-        return getMessage('victory', 'survival');
+function checkIntermediateGoals(state) {
+    const totalResources = Object.values(state.resources).reduce((sum, v) => sum + v, 0);
+    let bonusMessage = "";
+
+    if (state.day === 10) {
+        jsPrint("\n--- 10日目 中間評価 ---");
+        if (state.resources.trust >= 45 && totalResources >= 160) {
+            bonusMessage = "評議会は安定しており、資源も順調です。住民の士気が高まりました。 (trust +5)";
+            state.resources.trust += 5;
+        } else if (state.resources.trust < 30) {
+            bonusMessage = "評議会の信頼が大きく損なわれています。このままでは危険です...";
+        } else {
+            bonusMessage = "なんとか10日間を乗り切りました。しかし、まだ気は抜けません。";
+        }
+        jsPrint(bonusMessage);
+        jsPrint("--------------------------\n");
     }
-    return null;
+
+    if (state.day === 20) {
+        jsPrint("\n--- 20日目 中間評価 ---");
+        if (state.resources.trust >= 50 && totalResources >= 180) {
+            bonusMessage = "優れたリーダーシップにより、避難所は磐石です。新たな展望が開けます。 (全資源 +3)";
+            for (const r in state.resources) { state.resources[r] += 3; }
+        } else if (state.resources.people < 50) {
+            bonusMessage = "人員が危険な水準まで減少しています。避難所の維持が困難になってきました。";
+        } else {
+            bonusMessage = "20日が経過。終わりは近いですが、最も困難な時期かもしれません。";
+        }
+        jsPrint(bonusMessage);
+        jsPrint("--------------------------\n");
+    }
+}
+
+function checkVictoryConditions(state) {
+  if (state.day > 30) {
+    const { trust, people } = state.resources;
+    const totalResources = Object.values(state.resources).reduce((sum, v) => sum + v, 0);
+    if (trust >= 70 && people >= 70 && totalResources >= 300) return getMessage('victory','perfect');
+    if (trust >= 60) return getMessage('victory','trust');
+    if (totalResources >= 200) return getMessage('victory','stable');
+    return getMessage('victory','survival');
+  }
+  return null;
 }
 
 function calculateDailyConsumption(state) {
     const people = state.resources.people;
+    let fuel_mod = 1.0;
+    let food_mod = 1.0;
+
+    if(state.events) {
+        state.events.forEach(event => {
+            if (event.trigger_day === state.day && event.effect) {
+                if (event.effect.type === 'fuel_consumption') {
+                    fuel_mod = event.effect.modifier;
+                    jsPrint(`!!! イベント効果: 嵐により燃料消費が${fuel_mod}倍になります !!!`);
+                }
+            }
+        });
+    }
+
     const baseFuel = Math.max(3, Math.floor(people / 8));
     const baseFood = Math.max(2, Math.floor(people / 10));
-    return { fuel: baseFuel, food: baseFood };
+    return { fuel: Math.floor(baseFuel * fuel_mod), food: Math.floor(baseFood * food_mod) };
 }
 
 window.startGame = function() {
@@ -442,15 +617,42 @@ window.performEnvoyAction = function() {
 };
 
 window.performResourcesAction = function() {
-  jsPrint(getMessage('game_loop', 'resource_log_not_implemented'));
+  const d = gameState.day;
+  const reported = gameState.logs.reported[d] || [];
+  const actual = gameState.logs.actual[d] || [];
+  const nextUse = calculateDailyConsumption(gameState);
+  jsPrint(getMessage('ui','reported_summary'));
+  reported.forEach(r=>jsPrint(r));
+  jsPrint(getMessage('ui','ops_summary'));
+  actual.forEach(a=>jsPrint(a));
+  jsPrint(`次日予測消費: fuel -${nextUse.fuel}, food -${nextUse.food}`);
 };
 
 window.performRestAction = function() {
   const opsLog = applyOperations(gameState);
   gameState.logs.actual[gameState.day] = (gameState.logs.actual[gameState.day] || []).concat(opsLog);
+  
   const { fuel, food } = calculateDailyConsumption(gameState);
   gameState.resources.fuel = Math.max(0, gameState.resources.fuel - fuel);
   gameState.resources.food = Math.max(0, gameState.resources.food - food);
+  
+  checkIntermediateGoals(gameState); // Call intermediate goal check
+
+  const defeatCondition = checkDefeatConditions(gameState);
+  if (defeatCondition) {
+      jsPrint(`\n${defeatCondition}`);
+      // Disable all buttons or show a game over screen
+      window.toggleActionButtons(false);
+      return;
+  }
+
+  const victoryCondition = checkVictoryConditions(gameState);
+  if (victoryCondition) {
+      jsPrint(`\n${victoryCondition}`);
+      window.toggleActionButtons(false);
+      return;
+  }
+
   gameState.day++;
   startDaySimple(gameState);
 };
